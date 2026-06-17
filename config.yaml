@@ -1,0 +1,91 @@
+# Configuration for the MLB forecaster.
+# All tunables live here so the model can be calibrated without code edits.
+
+data:
+  # Where cached/processed/output artifacts live (relative to repo root).
+  raw_dir: data/raw
+  processed_dir: data/processed
+  features_dir: data/features
+  models_dir: data/models
+  output_dir: data/output
+  # Seasons to consider "available" for training/backtesting.
+  default_seasons: [2017, 2018, 2019, 2021, 2022, 2023, 2024, 2025]
+
+api:
+  base_url: https://statsapi.mlb.com/api
+  sport_id: 1            # 1 = MLB
+  request_timeout: 30    # seconds
+  max_retries: 4
+  backoff_factor: 0.5    # exponential backoff base (seconds)
+  cache_enabled: true
+
+elo:
+  # Starting (initial) values; the *_bounds are search ranges used by `fit-elo`.
+  mean_rating: 1500.0
+  k_factor: 4.0
+  home_field_adv: 24.0          # Elo points
+  mov_alpha: 2.2                # margin-of-victory multiplier shape
+  mov_autocorr: 0.001           # autocorrelation damping coefficient
+  pitcher_weight: 1.0           # scales pitcher_adj contribution
+  pitcher_rolling_window: 10    # starts used for rolling game score
+  pitcher_recency_decay: 0.85   # geometric decay (most recent start weighted highest)
+  pitcher_adj_cap: 50.0         # max |Elo| swing from a single starter
+  preseason_reversion: 0.33     # fraction reverted toward mean_rating between seasons
+  rest_advantage: 0.0           # Elo points per rest-day differential (fit if enabled)
+
+  fit:
+    # Bounds for scipy optimization (min, max). Only listed params are fit.
+    k_factor: [1.0, 12.0]
+    home_field_adv: [0.0, 60.0]
+    mov_alpha: [0.5, 5.0]
+    mov_autocorr: [0.0, 0.01]
+    pitcher_weight: [0.0, 2.0]
+    preseason_reversion: [0.0, 0.8]
+    maxiter: 200
+
+features:
+  recent_form_window: 10        # games for rolling run differential
+  include:
+    elo_diff: true
+    team_ratings: true
+    pitcher_adj: true
+    pitcher_rgs: true
+    rest_days: true
+    recent_form: true
+    month: true
+    playoff: true
+
+ml:
+  # Walk-forward (expanding-window) cross-validation by season.
+  cv:
+    scheme: expanding_by_season
+    min_train_seasons: 2
+  logistic:
+    C: 1.0
+    max_iter: 1000
+  lightgbm:
+    n_estimators: 400
+    learning_rate: 0.03
+    num_leaves: 31
+    max_depth: -1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_samples: 50
+    reg_lambda: 1.0
+  calibration: sigmoid      # one of: isotonic | sigmoid | none (isotonic overfits MLB)
+  margin:
+    enabled: true           # train a run-margin regression model alongside the classifier
+    ridge_alpha: 1.0
+
+forecast:
+  n_sims: 10000
+  random_seed: 538
+  win_prob_source: classifier   # classifier | margin (which model drives game probabilities)
+  # Current MLB playoff format (per league): 3 division winners + 3 wild cards.
+  division_winners_per_league: 3
+  wild_cards_per_league: 3
+
+selfcorrect:
+  retrain_every_days: 7     # cadence for refitting the ML layer
+  refit_elo_every_days: 30  # cadence for re-optimizing Elo hyperparameters
+  rolling_train_seasons: 5  # rolling window size for retrains

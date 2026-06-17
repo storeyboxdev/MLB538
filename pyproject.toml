@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlb-forecaster"
+version = "0.1.0"
+description = "FiveThirtyEight-style, ML-driven MLB forecaster (Elo features + trained predictor + Monte Carlo season simulation)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "jmstorey" }]
+dependencies = [
+    "requests>=2.31",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "scikit-learn>=1.3",
+    "lightgbm>=4.0",
+    "scipy>=1.10",
+    "pyyaml>=6.0",
+    "click>=8.1",
+    "tqdm>=4.66",
+    "joblib>=1.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+mlbfc = "mlb_forecaster.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["mlb_forecaster*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
