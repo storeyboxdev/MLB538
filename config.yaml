@@ -10,6 +10,11 @@ data:
   output_dir: data/output
   # Seasons to consider "available" for training/backtesting.
   default_seasons: [2017, 2018, 2019, 2021, 2022, 2023, 2024, 2025]
+  # Optional Google Cloud Storage sink. When gcs_bucket is set (or the env var
+  # MLB538_GCS_BUCKET is present), scraping also uploads each season's processed
+  # data as Parquet to gs://<bucket>/<prefix>/processed/ for BigQuery ingestion.
+  gcs_bucket: null
+  gcs_prefix: mlb538
 
 api:
   base_url: https://statsapi.mlb.com/api

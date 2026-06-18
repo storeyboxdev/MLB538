@@ -11,7 +11,7 @@ from .api.games import ingest_season
 from .api.teams import fetch_teams
 from .backtest.evaluate import run_backtest
 from .config import Config
-from .data import store
+from .data import gcs, store
 from .elo.engine import final_ratings, run_engine
 from .elo.fit import fit_elo
 from .elo.params import EloParams
@@ -62,8 +62,12 @@ def scrape(config: Config, seasons: list[int], *, fetch_boxscores: bool = True,
         df = ingest_season(config, s, fetch_boxscores=fetch_boxscores,
                            use_cache=not refresh)
         path = store.write_games(df, config.processed_dir, s)
-        log(f"[scrape] {s}: {len(df)} games -> {path.name} "
-            f"({int((df['status'] == 'Final').sum())} final)")
+        msg = (f"[scrape] {s}: {len(df)} games -> {path.name} "
+               f"({int((df['status'] == 'Final').sum())} final)")
+        if gcs.is_enabled(config):
+            uri = gcs.upload_games(df, config, s)
+            msg += f" -> {uri}"
+        log(msg)
 
 
 def load_games(config: Config, seasons: list[int]) -> pd.DataFrame:
