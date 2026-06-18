@@ -34,6 +34,24 @@ def is_enabled(config: Config) -> bool:
     return bool(bucket_name(config))
 
 
+def check_deps() -> None:
+    """Fail fast with a clear message if the optional gcp extra isn't installed."""
+    missing = []
+    try:
+        import pyarrow  # noqa: F401
+    except ImportError:
+        missing.append("pyarrow")
+    try:
+        from google.cloud import storage  # noqa: F401
+    except ImportError:
+        missing.append("google-cloud-storage")
+    if missing:
+        raise RuntimeError(
+            "GCS sink is enabled but missing " + ", ".join(missing)
+            + '. Install the gcp extra:  pip install -e ".[gcp]"'
+        )
+
+
 def _client():
     # Deferred import so the package works without the gcp extra installed.
     from google.cloud import storage

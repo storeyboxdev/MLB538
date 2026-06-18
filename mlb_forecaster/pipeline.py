@@ -58,6 +58,8 @@ def scrape(config: Config, seasons: list[int], *, fetch_boxscores: bool = True,
            refresh: bool = False, log: Logger = print) -> None:
     """Ingest each season and write processed game logs."""
     config.ensure_dirs()
+    if gcs.is_enabled(config):
+        gcs.check_deps()  # fail fast before a long scrape if deps/bucket are missing
     for s in seasons:
         df = ingest_season(config, s, fetch_boxscores=fetch_boxscores,
                            use_cache=not refresh)
@@ -65,8 +67,10 @@ def scrape(config: Config, seasons: list[int], *, fetch_boxscores: bool = True,
         msg = (f"[scrape] {s}: {len(df)} games -> {path.name} "
                f"({int((df['status'] == 'Final').sum())} final)")
         if gcs.is_enabled(config):
-            uri = gcs.upload_games(df, config, s)
-            msg += f" -> {uri}"
+            try:
+                msg += f" -> {gcs.upload_games(df, config, s)}"
+            except Exception as e:  # don't lose scrape progress on a transient upload error
+                msg += f"  [GCS upload failed: {e}]"
         log(msg)
 
 
@@ -83,7 +87,11 @@ def rate(config: Config, seasons: list[int], params: Optional[EloParams] = None,
     store.write_csv(eng, config.output_dir / "ratings.csv")
     msg = f"[rate] {len(eng)} game rows -> ratings.csv"
     if gcs.is_enabled(config):
-        msg += f" -> {gcs.upload_ratings(eng, config)}"
+        gcs.check_deps()
+        try:
+            msg += f" -> {gcs.upload_ratings(eng, config)}"
+        except Exception as e:
+            msg += f"  [GCS upload failed: {e}]"
     log(msg)
     return eng
 
@@ -167,7 +175,11 @@ def forecast(config: Config, season: int, n_sims: Optional[int] = None,
     path = write_forecast(odds, config.output_dir, season, n, model_version)
     msg = f"[forecast] {season}: wrote {path.name} ({n} sims, model={model_version})"
     if gcs.is_enabled(config):
-        msg += f" -> {gcs.upload_forecast(odds, config, season, model_version)}"
+        gcs.check_deps()
+        try:
+            msg += f" -> {gcs.upload_forecast(odds, config, season, model_version)}"
+        except Exception as e:
+            msg += f"  [GCS upload failed: {e}]"
     log(msg)
     return odds
 
