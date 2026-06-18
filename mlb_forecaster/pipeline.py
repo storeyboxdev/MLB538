@@ -11,7 +11,7 @@ from .api.games import ingest_season
 from .api.teams import fetch_teams
 from .backtest.evaluate import run_backtest
 from .config import Config
-from .data import store
+from .data import gcs, store
 from .elo.engine import final_ratings, run_engine
 from .elo.fit import fit_elo
 from .elo.params import EloParams
@@ -58,12 +58,20 @@ def scrape(config: Config, seasons: list[int], *, fetch_boxscores: bool = True,
            refresh: bool = False, log: Logger = print) -> None:
     """Ingest each season and write processed game logs."""
     config.ensure_dirs()
+    if gcs.is_enabled(config):
+        gcs.check_deps()  # fail fast before a long scrape if deps/bucket are missing
     for s in seasons:
         df = ingest_season(config, s, fetch_boxscores=fetch_boxscores,
                            use_cache=not refresh)
         path = store.write_games(df, config.processed_dir, s)
-        log(f"[scrape] {s}: {len(df)} games -> {path.name} "
-            f"({int((df['status'] == 'Final').sum())} final)")
+        msg = (f"[scrape] {s}: {len(df)} games -> {path.name} "
+               f"({int((df['status'] == 'Final').sum())} final)")
+        if gcs.is_enabled(config):
+            try:
+                msg += f" -> {gcs.upload_games(df, config, s)}"
+            except Exception as e:  # don't lose scrape progress on a transient upload error
+                msg += f"  [GCS upload failed: {e}]"
+        log(msg)
 
 
 def load_games(config: Config, seasons: list[int]) -> pd.DataFrame:
@@ -77,7 +85,14 @@ def rate(config: Config, seasons: list[int], params: Optional[EloParams] = None,
     games = load_games(config, seasons)
     eng = run_engine(games, params)
     store.write_csv(eng, config.output_dir / "ratings.csv")
-    log(f"[rate] {len(eng)} game rows -> ratings.csv")
+    msg = f"[rate] {len(eng)} game rows -> ratings.csv"
+    if gcs.is_enabled(config):
+        gcs.check_deps()
+        try:
+            msg += f" -> {gcs.upload_ratings(eng, config)}"
+        except Exception as e:
+            msg += f"  [GCS upload failed: {e}]"
+    log(msg)
     return eng
 
 
@@ -158,7 +173,14 @@ def forecast(config: Config, season: int, n_sims: Optional[int] = None,
                            prob_fn=prob_fn, margin_fn=margin_fn, n_sims=n_sims)
     n = n_sims or config.raw["forecast"]["n_sims"]
     path = write_forecast(odds, config.output_dir, season, n, model_version)
-    log(f"[forecast] {season}: wrote {path.name} ({n} sims, model={model_version})")
+    msg = f"[forecast] {season}: wrote {path.name} ({n} sims, model={model_version})"
+    if gcs.is_enabled(config):
+        gcs.check_deps()
+        try:
+            msg += f" -> {gcs.upload_forecast(odds, config, season, model_version)}"
+        except Exception as e:
+            msg += f"  [GCS upload failed: {e}]"
+    log(msg)
     return odds
 
 

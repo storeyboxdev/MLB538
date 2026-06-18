@@ -4,6 +4,7 @@ data/processed/
 data/features/
 data/models/
 data/output/
+*.zip
 
 # Python
 __pycache__/
