@@ -52,14 +52,32 @@ def upload_file(local_path, bucket: str, blob_name: str) -> str:
     return f"gs://{bucket}/{blob_name}"
 
 
-def upload_games(df: pd.DataFrame, config: Config, season: int) -> str:
-    """Upload a season's games as Parquet to gs://<bucket>/<prefix>/processed/."""
-    bucket = bucket_name(config)
-    blob_name = f"{prefix(config)}/processed/games_{season}.parquet"
+def _upload_parquet(df: pd.DataFrame, config: Config, blob_name: str) -> str:
     out = df.copy()
     if "date" in out.columns:
         # Coerce ISO strings to datetime so BigQuery infers a TIMESTAMP column.
         out["date"] = pd.to_datetime(out["date"], errors="coerce")
     buf = io.BytesIO()
     out.to_parquet(buf, index=False)
-    return upload_bytes(buf.getvalue(), bucket, blob_name, "application/octet-stream")
+    return upload_bytes(buf.getvalue(), bucket_name(config), blob_name,
+                        "application/octet-stream")
+
+
+def upload_games(df: pd.DataFrame, config: Config, season: int) -> str:
+    """Upload a season's games as Parquet to gs://<bucket>/<prefix>/processed/."""
+    return _upload_parquet(df, config, f"{prefix(config)}/processed/games_{season}.parquet")
+
+
+def upload_ratings(df: pd.DataFrame, config: Config) -> str:
+    """Upload the per-game Elo/ratings table as Parquet (single table, all seasons)."""
+    return _upload_parquet(df, config, f"{prefix(config)}/ratings/ratings.parquet")
+
+
+def upload_forecast(odds: pd.DataFrame, config: Config, season: int,
+                    model_version: str) -> str:
+    """Upload a season's forecast odds (one row per team) as Parquet."""
+    out = odds.copy()
+    out.insert(0, "season", season)
+    out["model_version"] = model_version
+    out["generated"] = pd.Timestamp.utcnow().tz_localize(None)
+    return _upload_parquet(out, config, f"{prefix(config)}/forecast/forecast_{season}.parquet")

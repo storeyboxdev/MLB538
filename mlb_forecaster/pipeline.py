@@ -81,7 +81,10 @@ def rate(config: Config, seasons: list[int], params: Optional[EloParams] = None,
     games = load_games(config, seasons)
     eng = run_engine(games, params)
     store.write_csv(eng, config.output_dir / "ratings.csv")
-    log(f"[rate] {len(eng)} game rows -> ratings.csv")
+    msg = f"[rate] {len(eng)} game rows -> ratings.csv"
+    if gcs.is_enabled(config):
+        msg += f" -> {gcs.upload_ratings(eng, config)}"
+    log(msg)
     return eng
 
 
@@ -162,7 +165,10 @@ def forecast(config: Config, season: int, n_sims: Optional[int] = None,
                            prob_fn=prob_fn, margin_fn=margin_fn, n_sims=n_sims)
     n = n_sims or config.raw["forecast"]["n_sims"]
     path = write_forecast(odds, config.output_dir, season, n, model_version)
-    log(f"[forecast] {season}: wrote {path.name} ({n} sims, model={model_version})")
+    msg = f"[forecast] {season}: wrote {path.name} ({n} sims, model={model_version})"
+    if gcs.is_enabled(config):
+        msg += f" -> {gcs.upload_forecast(odds, config, season, model_version)}"
+    log(msg)
     return odds
 
 
