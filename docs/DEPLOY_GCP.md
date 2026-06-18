@@ -141,28 +141,32 @@ gcloud storage cp data/output/*.json gs://YOUR_PROJECT_ID-mlb538/
 
 ## Part 4 — (Optional) Update itself every day
 
-The app has an `mlbfc update` command that pulls the latest games, advances the
-ratings, and retrains on a cadence. The simplest way to run it daily is **cron** on
-the VM (the VM must be left running for this).
+The repo ships a ready-made daily runner at **`scripts/daily_update.sh`** that does
+the whole cycle: incremental scrape (only new games, thanks to the on-disk cache) →
+rebuild ratings + forecast → reload all three BigQuery tables. It reads the bucket
+from `MLB538_GCS_BUCKET`, so nothing is hard-coded. The simplest way to run it daily
+is **cron** on the VM (the VM must be left running for this).
 
 On the VM:
 ```bash
-# Create a tiny script that runs the daily update + a fresh forecast + uploads it
-cat > ~/daily.sh <<'EOF'
-#!/usr/bin/env bash
-cd ~/MLB538
-source .venv/bin/activate
-mlbfc update --season 2026
-mlbfc forecast --season 2026 --sims 10000
-gcloud storage cp data/output/forecast.json gs://YOUR_PROJECT_ID-mlb538/
-EOF
-chmod +x ~/daily.sh
+chmod +x ~/MLB538/scripts/daily_update.sh
 
-# Schedule it for 6:00 AM every day
-( crontab -l 2>/dev/null; echo "0 6 * * * /home/$USER/daily.sh >> /home/$USER/daily.log 2>&1" ) | crontab -
+# Run a daily at 7:00 AM (pass the bucket inline so cron's clean env has it)
+( crontab -l 2>/dev/null; \
+  echo "0 7 * * * MLB538_GCS_BUCKET=YOUR_PROJECT_ID-mlb538 /home/$USER/MLB538/scripts/daily_update.sh >> /home/$USER/MLB538/daily.log 2>&1" ) | crontab -
 ```
 
-Check it later with `cat ~/daily.log`.
+Test it once by hand first, then check the log:
+```bash
+MLB538_GCS_BUCKET=YOUR_PROJECT_ID-mlb538 ~/MLB538/scripts/daily_update.sh
+cat ~/MLB538/daily.log
+```
+
+**Why this is incremental:** the scrape re-fetches only the current season's schedule
+and the box scores of newly-finished games (completed games are cache hits in
+`data/raw/`), and the BigQuery reload is a cheap full `--replace` because the dataset
+is only a few MB. The cache lives on the VM disk, so it must persist between runs —
+which it does on a cron'd VM.
 
 > A more "cloud-native" alternative (no always-on VM) is a **Cloud Run Job** on a
 > **Cloud Scheduler** trigger. It's cheaper and tidier but requires packaging the app
