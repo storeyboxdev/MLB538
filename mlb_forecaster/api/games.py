@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pandas as pd
 from tqdm import tqdm
 
@@ -89,4 +91,12 @@ def ingest_season(config: Config, season: int, *, fetch_boxscores: bool = True,
             .drop(columns="_has_score")
             .sort_values(["date", "game_pk"])
             .reset_index(drop=True))
+
+    # Drop cancelled/abandoned games: the schedule lists them (often as "Final"
+    # with no score, e.g. post-9/11 2001) but they were never played and the
+    # makeup carries its own gamePk + score. Keep a game only if it has a score
+    # (played) or is genuinely upcoming (date today or later).
+    played = df["home_score"].notna()
+    upcoming = pd.to_datetime(df["date"]).dt.date >= date.today()
+    df = df[played | upcoming].reset_index(drop=True)
     return df
