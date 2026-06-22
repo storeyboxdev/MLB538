@@ -26,6 +26,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7.4"]
 gcp = ["google-cloud-storage>=2.10", "pyarrow>=12.0"]
+# Both front-ends for the service layer (REST + MCP) and the background-job server.
+service = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "mcp>=1.2"]
 
 [project.scripts]
 mlbfc = "mlb_forecaster.cli:main"
