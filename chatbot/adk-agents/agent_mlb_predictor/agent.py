@@ -1,5 +1,6 @@
 from google.adk.agents import Agent
 from .tools import (
+    get_bigquery_mcp_toolset,
     get_health,
     get_make_playoffs_chance,
     get_win_division_chance,
@@ -16,6 +17,34 @@ from .tools import (
 )
 
 MODEL = "gemini-2.5-flash"
+PROJECT_ID = "qwiklabs-asl-02-03bf2b8329ea"
+DATASET = "mlb538"
+bigquery_tools = get_bigquery_mcp_toolset()
+
+
+bigquery_agent = Agent(
+    name="bigquery_agent",
+    model=MODEL,
+    description="Runs analytics queries against BigQuery via MCP tools.",
+    instruction=f"""You are a BigQuery analytics specialist.
+    Default Google Cloud project is `{PROJECT_ID}`.
+    Only query dataset `{DATASET}`.
+    Use fully-qualified names like `{PROJECT_ID}.{DATASET}.<table_name>`.
+
+    **Access Restrictions:**
+    You only have access to the `{DATASET}` dataset. You do NOT have access 
+    to other datasets. If a customer asks about admin 
+    data, politely explain that you only have access to `{DATASET}`.    
+
+    Use the available BigQuery MCP tools to:
+    - inspect datasets/tables/schemas
+    - run SQL queries
+    - summarize query results clearly
+
+    Prefer safe read-only queries unless the user explicitly asks otherwise.
+    If required table or dataset is unknown, ask a clarifying question.""",
+    tools=[bigquery_tools],
+)
 
 # Prediction subagent
 prediction_agent = Agent(
@@ -135,12 +164,13 @@ root_agent = Agent(
     description="The main coordinator agent. Handles prediction requests for Major League Baseball (MLB).",
     instruction="""You are the main MLB predictor agent. Your primary responsibility is to coordinate and delegate prediction requests about Major League Baseball.
 
-    You have access to five specialized subagents:
+    You have access to six specialized subagents:
     1. health_agent - checks API health and availability
     2. prediction_agent - handles playoff, division, and World Series predictions
     3. elo_score_agent - handles ELO scores, leaderboards, and peak ratings
     4. elo_trend_agent - handles ELO trends, trade deadline analysis, and hot/cold teams
     5. matchup_history_agent - handles head-to-head matchups and World Series history
+    6. bigquery_agent - handles BigQuery MCP dataset exploration and SQL analytics
 
     Route user requests to the appropriate subagent based on their query type:
     - For API health/status checks → health_agent
@@ -148,6 +178,7 @@ root_agent = Agent(
     - For ELO scores, leaderboards, or peak ratings → elo_score_agent
     - For ELO trends, deadline impact, or hot/cold teams → elo_trend_agent
     - For matchups or World Series history → matchup_history_agent
+    - For SQL/data exploration/BigQuery analytics → bigquery_agent
 
     If a request doesn't fit any category, respond appropriately or state you cannot handle it.""",
     sub_agents=[
@@ -156,5 +187,6 @@ root_agent = Agent(
         elo_score_agent,
         elo_trend_agent,
         matchup_history_agent,
+        bigquery_agent,
     ],
 )
