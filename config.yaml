@@ -53,39 +53,61 @@ elo:
     preseason_reversion: [0.0, 0.8]
     maxiter: 200
 
+# ── MODEL TINKERING ──────────────────────────────────────────────────────────
+# The `features` and `ml` blocks below are the LIVE model settings — the values
+# here are the current best-known combination. To trial alternatives WITHOUT
+# editing this file, add a named preset to experiments.yaml and run:
+#
+#     mlbfc compare            # ranks all presets by walk-forward CV log loss
+#
+# experiments.yaml also records the top combinations so far so you can always
+# revert to a known-good baseline. To adopt a winning preset, copy its settings
+# into the blocks below and run `mlbfc train`.
+# ─────────────────────────────────────────────────────────────────────────────
+
 features:
-  recent_form_window: 10        # games for rolling run differential
+  # Each include flag toggles a feature GROUP on/off. Turning one off shrinks the
+  # model input; use `mlbfc compare` with a preset that flips a flag to measure
+  # whether a group actually helps (ablation).
+  recent_form_window: 10        # games in the rolling form window; larger = smoother/slower-reacting
   include:
-    elo_diff: true
-    team_ratings: true
-    pitcher_adj: true
-    pitcher_rgs: true
-    rest_days: true
-    recent_form: true
-    month: true
-    playoff: true
+    elo_diff: true              # Elo & rating point differential (the core signal)
+    team_ratings: true          # raw pre-game Elo of each side
+    pitcher_adj: true           # starting-pitcher Elo adjustment + its differential
+    pitcher_rgs: true           # starting-pitcher rolling game score
+    rest_days: true             # days of rest per side + differential
+    recent_form: true           # rolling run-diff & win pct (uses recent_form_window)
+    month: true                 # calendar month (weak seasonality signal)
+    playoff: true               # playoff-game flag
 
 ml:
-  # Walk-forward (expanding-window) cross-validation by season.
+  # Walk-forward (expanding-window) cross-validation by season: train on seasons
+  # < Y, test on Y. This is also the scoring used by `mlbfc compare`.
   cv:
     scheme: expanding_by_season
-    min_train_seasons: 2
+    min_train_seasons: 2        # prior seasons required before a season is scored
+  # Logistic regression (the currently SELECTED family). C is inverse L2 strength:
+  # lower = MORE regularization (simpler), higher = less. Useful range ~0.1–10.
   logistic:
     C: 1.0
-    max_iter: 1000
+    max_iter: 1000              # solver iterations; raise only if convergence warns
+  # LightGBM (gradient-boosted trees). The knobs below trade capacity vs.
+  # overfitting — MLB is noisy, so the defaults stay deliberately conservative.
   lightgbm:
-    n_estimators: 400
-    learning_rate: 0.03
-    num_leaves: 31
-    max_depth: -1
-    subsample: 0.8
-    colsample_bytree: 0.8
-    min_child_samples: 50
-    reg_lambda: 1.0
-  calibration: sigmoid      # one of: isotonic | sigmoid | none (isotonic overfits MLB)
+    n_estimators: 400           # number of boosting rounds (more = higher capacity)
+    learning_rate: 0.03         # smaller = slower/steadier learning (pair with more rounds)
+    num_leaves: 31              # tree complexity; lower fights overfitting
+    max_depth: -1               # -1 = unbounded depth
+    subsample: 0.8              # row sampling per round (bagging)
+    colsample_bytree: 0.8       # feature sampling per tree
+    min_child_samples: 50       # min rows per leaf; higher = stronger regularization
+    reg_lambda: 1.0             # L2 penalty on leaf weights
+  # Probability calibration. sigmoid is best for MLB — isotonic OVERFIT and cost
+  # ~0.02 log loss in testing. one of: isotonic | sigmoid | none.
+  calibration: sigmoid
   margin:
-    enabled: true           # train a run-margin regression model alongside the classifier
-    ridge_alpha: 1.0
+    enabled: true               # train a run-margin regression model alongside the classifier
+    ridge_alpha: 1.0            # L2 strength for the ridge margin model (higher = smoother)
 
 forecast:
   n_sims: 10000

@@ -15,6 +15,7 @@ from .data import gcs, store
 from .elo.engine import final_ratings, run_engine
 from .elo.fit import fit_elo
 from .elo.params import EloParams
+from .experiments import load_presets, run_comparison
 from .forecast.odds import write_forecast
 from .forecast.simulate import simulate_season
 from .ml.features import build_features
@@ -193,4 +194,15 @@ def backtest(config: Config, seasons: list[int], params: Optional[EloParams] = N
     store.write_json(report, config.output_dir / "backtest.json")
     log(f"[backtest] best={report['best_model']} | " + " | ".join(
         f"{k}={v['log_loss']:.4f}" for k, v in report["models"].items()))
+    return report
+
+
+def compare(config: Config, seasons: list[int], presets_path: str,
+            names: Optional[list[str]] = None, log: Logger = print) -> dict[str, Any]:
+    """Score experiment presets side-by-side and persist comparison.json."""
+    games = load_games(config, seasons)
+    presets = load_presets(presets_path)
+    report = run_comparison(config, games, presets, names=names, log=log)
+    store.write_json(report, config.output_dir / "comparison.json")
+    log(f"[compare] best={report['best']} over {len(report['results'])} variant(s)")
     return report
