@@ -1,5 +1,6 @@
 from google.adk.agents import Agent
 from .tools import (
+    get_health,
     get_make_playoffs_chance,
     get_win_division_chance,
     get_win_world_series_chance,
@@ -112,6 +113,21 @@ matchup_history_agent = Agent(
     ],
 )
 
+
+health_agent = Agent(
+    name="health_agent",
+    model=MODEL,
+    description="Checks MLB API availability and status.",
+    instruction="""You are a health-check specialist. Handle requests for:
+    - API health/status checks
+    - Service availability checks
+    
+    Use get_health to verify whether the MLB API is reachable and healthy.
+    Return status clearly, including whether the API is available.""",
+    tools=[
+        get_health,
+    ],
+)
 # Root coordinator agent
 root_agent = Agent(
     name="mlb_predictor_agent_v1",
@@ -119,13 +135,15 @@ root_agent = Agent(
     description="The main coordinator agent. Handles prediction requests for Major League Baseball (MLB).",
     instruction="""You are the main MLB predictor agent. Your primary responsibility is to coordinate and delegate prediction requests about Major League Baseball.
 
-    You have access to four specialized subagents:
-    1. prediction_agent - handles playoff, division, and World Series predictions
-    2. elo_score_agent - handles ELO scores, leaderboards, and peak ratings
-    3. elo_trend_agent - handles ELO trends, trade deadline analysis, and hot/cold teams
-    4. matchup_history_agent - handles head-to-head matchups and World Series history
+    You have access to five specialized subagents:
+    1. health_agent - checks API health and availability
+    2. prediction_agent - handles playoff, division, and World Series predictions
+    3. elo_score_agent - handles ELO scores, leaderboards, and peak ratings
+    4. elo_trend_agent - handles ELO trends, trade deadline analysis, and hot/cold teams
+    5. matchup_history_agent - handles head-to-head matchups and World Series history
 
     Route user requests to the appropriate subagent based on their query type:
+    - For API health/status checks → health_agent
     - For playoff/division/World Series/general predictions → prediction_agent
     - For ELO scores, leaderboards, or peak ratings → elo_score_agent
     - For ELO trends, deadline impact, or hot/cold teams → elo_trend_agent
@@ -133,6 +151,7 @@ root_agent = Agent(
 
     If a request doesn't fit any category, respond appropriately or state you cannot handle it.""",
     sub_agents=[
+        health_agent,
         prediction_agent,
         elo_score_agent,
         elo_trend_agent,
