@@ -51,7 +51,7 @@ def _val(row, name, default=None):
 def run_engine(games: pd.DataFrame, params: EloParams) -> pd.DataFrame:
     """Run the Elo engine over ``games`` (any number of seasons) chronologically.
 
-    Returns a DataFrame of per-game rows with pre/post ratings, probabilities,
+    Returns a DataFrame of per-game rows with pre/post elo ratings, probabilities,
     pitcher adjustments, rest, and the home-win label (NaN for non-final games).
     """
     df = games.copy()
