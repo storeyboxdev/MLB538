@@ -1,9 +1,54 @@
 import os
 import requests
+import google.auth
+from google.auth.transport.requests import Request
+from google.cloud import bigquery
+from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
+from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
 
 # API configuration
 API_BASE_URL = os.getenv("MLB_API_BASE_URL", "http://35.238.218.28:8000")
 API_TIMEOUT = 20
+
+# BigQuery Configuration
+PROJECT_ID = "qwiklabs-asl-02-03bf2b8329ea"
+BIGQUERY_MCP_URL = "https://bigquery.googleapis.com/mcp"
+os.environ["GOOGLE_CLOUD_PROJECT"] = PROJECT_ID
+
+
+
+def get_bigquery_mcp_toolset() -> MCPToolset:
+    """
+    Create an MCPToolset connected to Google's managed BigQuery MCP server.
+    """
+    # Get OAuth credentials
+    credentials, project_id = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/bigquery"]
+    )
+    credentials.refresh(Request())
+    oauth_token = credentials.token
+
+    # Use environment project if available
+    if PROJECT_ID:
+        project_id = PROJECT_ID
+
+    # Create headers with OAuth token
+    headers = {
+        "Authorization": f"Bearer {oauth_token}",
+        "x-goog-user-project": project_id,
+    }
+
+    # Create the MCPToolset
+    tools = MCPToolset(
+        connection_params=StreamableHTTPConnectionParams(
+            url=BIGQUERY_MCP_URL,
+            headers=headers,
+        )
+    )
+
+    print(f"[BigQueryTools] MCP Toolset configured for project: {project_id}")
+
+    return tools
 
 def _get_headers() -> dict:
     """Build request headers."""
