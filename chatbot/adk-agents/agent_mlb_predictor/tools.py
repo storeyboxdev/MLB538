@@ -1,3 +1,71 @@
+import os
+import requests
+
+# API configuration
+API_BASE_URL = os.getenv("MLB_API_BASE_URL", "http://35.238.218.28:8000")
+API_TIMEOUT = 20
+
+def _get_headers() -> dict:
+    """Build request headers."""
+    return {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+def get_health() -> dict:
+    """Check the health status of the MLB API endpoint.
+    Returns:
+        dict: Includes 'status' and 'available' boolean.
+    """
+    print(f"--- Tool: get_health called for {API_BASE_URL} ---")
+    
+    url = f"{API_BASE_URL}/health"
+    
+    try:
+        resp = requests.get(
+            url,
+            headers=_get_headers(),
+            timeout=API_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return {
+            "available": True,
+            "status": data.get("status", "unknown"),
+            "url": API_BASE_URL,
+            "response": data,
+        }
+    except requests.HTTPError as e:
+        return {
+            "available": False,
+            "error": "http_error",
+            "status_code": e.response.status_code,
+            "message": f"API returned status {e.response.status_code}",
+            "url": API_BASE_URL,
+        }
+    except requests.ConnectionError:
+        return {
+            "available": False,
+            "error": "connection_error",
+            "message": f"Could not connect to API at {API_BASE_URL}",
+            "url": API_BASE_URL,
+        }
+    except requests.Timeout:
+        return {
+            "available": False,
+            "error": "timeout",
+            "message": f"API request timed out after {API_TIMEOUT}s",
+            "url": API_BASE_URL,
+        }
+    except Exception as e:
+        return {
+            "available": False,
+            "error": "unknown",
+            "message": str(e),
+            "url": API_BASE_URL,
+        }
+
 # TODO: connect to database (ex: BigQuery MCP)
 # Mock prediction data by year -> team
 MOCK_PREDICTION_DB: dict[str, dict[str, dict[str, float]]] = {
