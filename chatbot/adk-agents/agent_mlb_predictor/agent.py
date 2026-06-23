@@ -14,6 +14,7 @@ from .tools import (
     get_world_series_elo_history,
     get_elo_before_after_deadline,
     get_hot_cold_teams,
+    forecast,
 )
 
 MODEL = "gemini-2.5-flash"
@@ -50,26 +51,29 @@ bigquery_agent = Agent(
 prediction_agent = Agent(
     name="prediction_agent",
     model=MODEL,
-    description="Handles playoff, division, and World Series predictions.",
+    description="Handles playoff, division, World Series predictions, and season forecasts.",
     instruction="""You are a prediction specialist. Handle requests about:
     - Playoff chances for teams in a given year
     - Division win chances for teams in a given year
     - World Series win chances for teams in a given year
     - General team predictions for a given year
-    
-    If user inputs a number for year, convert to a string for the function.
-    
+    - Full season forecasts (projected wins and playoff/division/pennant/WS odds)
+
+    If user inputs a number for year, convert to a string for the function where required.
+
     Use get_make_playoffs_chance ONLY for playoff prediction chances.
     Use get_win_division_chance ONLY for division win chances.
     Use get_win_world_series_chance ONLY for World Series win chances.
     Use get_prediction_for_team_given_a_year for other team predictions.
-    
-    Always convert decimal results to percentages for the user.""",
+    Use forecast for season simulation forecasts (season + optional sims).
+
+    Always convert decimal probability results to percentages for the user.""",
     tools=[
         get_make_playoffs_chance,
         get_win_division_chance,
         get_win_world_series_chance,
         get_prediction_for_team_given_a_year,
+        forecast,
     ],
 )
 
@@ -166,7 +170,7 @@ root_agent = Agent(
 
     You have access to six specialized subagents:
     1. health_agent - checks API health and availability
-    2. prediction_agent - handles playoff, division, and World Series predictions
+    2. prediction_agent - handles playoff, division, World Series, and season forecast predictions
     3. elo_score_agent - handles ELO scores, leaderboards, and peak ratings
     4. elo_trend_agent - handles ELO trends, trade deadline analysis, and hot/cold teams
     5. matchup_history_agent - handles head-to-head matchups and World Series history
@@ -174,7 +178,7 @@ root_agent = Agent(
 
     Route user requests to the appropriate subagent based on their query type:
     - For API health/status checks → health_agent
-    - For playoff/division/World Series/general predictions → prediction_agent
+    - For playoff/division/World Series/general predictions/season forecasts → prediction_agent
     - For ELO scores, leaderboards, or peak ratings → elo_score_agent
     - For ELO trends, deadline impact, or hot/cold teams → elo_trend_agent
     - For matchups or World Series history → matchup_history_agent
