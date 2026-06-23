@@ -1,4 +1,7 @@
+from __future__ import annotations
 import os
+from typing import Optional
+
 import requests
 import google.auth
 from google.auth.transport.requests import Request
@@ -7,8 +10,18 @@ from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
 
 # API configuration
-API_BASE_URL = os.getenv("MLB_API_BASE_URL", "http://35.238.218.28:8000")
-API_TIMEOUT = 20
+API_BASE_URL = os.getenv("MLB_API_BASE_URL", os.getenv("MLB_API_URL", "http://34.173.102.166:8000"))
+API_TIMEOUT = float(os.getenv("MLB_API_TIMEOUT", "180"))
+
+# Request-session style aliases (as in your provided snippet)
+API_URL = API_BASE_URL.rstrip("/")
+_TIMEOUT = API_TIMEOUT
+_TOKEN = os.getenv("MLB_API_TOKEN")
+_session = requests.Session()
+if _TOKEN:
+    _session.headers["Authorization"] = f"Bearer {_TOKEN}"
+
+    
 
 # BigQuery Configuration
 PROJECT_ID = "qwiklabs-asl-02-03bf2b8329ea"
@@ -57,58 +70,69 @@ def _get_headers() -> dict:
         "Content-Type": "application/json",
     }
 
+def _get(path: str, params: Optional[dict] = None) -> dict:
+    r = _session.get(f"{API_URL}{path}", params=params, timeout=_TIMEOUT)
+    r.raise_for_status()
+    return r.json()
+
+
+def _post(path: str, body: dict) -> dict:
+    # requests' json= sets Content-Type: application/json (avoids the 422 a raw
+    # form-encoded body would cause).
+    r = _session.post(f"{API_URL}{path}", json=body, timeout=_TIMEOUT)
+    r.raise_for_status()
+    return r.json()
+
+
+def forecast(season: int, sims: Optional[int] = None) -> dict:
+    """Run a season forecast: simulate the rest of the season and return each
+    team's projected wins and playoff/division/pennant/World Series odds.
+    """
+    return _post("/forecast", {"season": season, "sims": sims})
 
 def get_health() -> dict:
-    """Check the health status of the MLB API endpoint.
+    """Check that the forecaster API is up and reachable.
     Returns:
         dict: Includes 'status' and 'available' boolean.
     """
-    print(f"--- Tool: get_health called for {API_BASE_URL} ---")
-    
-    url = f"{API_BASE_URL}/health"
-    
+    print(f"--- Tool: get_health called for {API_URL} ---")
     try:
-        resp = requests.get(
-            url,
-            headers=_get_headers(),
-            timeout=API_TIMEOUT,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        data = _get("/health")
         return {
             "available": True,
             "status": data.get("status", "unknown"),
-            "url": API_BASE_URL,
+            "url": API_URL,
             "response": data,
         }
     except requests.HTTPError as e:
+        status_code = e.response.status_code if e.response else None
         return {
             "available": False,
             "error": "http_error",
-            "status_code": e.response.status_code,
-            "message": f"API returned status {e.response.status_code}",
-            "url": API_BASE_URL,
+            "status_code": status_code,
+            "message": f"API returned status {status_code}" if status_code else "HTTP error",
+            "url": API_URL,
         }
     except requests.ConnectionError:
         return {
             "available": False,
             "error": "connection_error",
-            "message": f"Could not connect to API at {API_BASE_URL}",
-            "url": API_BASE_URL,
+            "message": f"Could not connect to API at {API_URL}",
+            "url": API_URL,
         }
     except requests.Timeout:
         return {
             "available": False,
             "error": "timeout",
-            "message": f"API request timed out after {API_TIMEOUT}s",
-            "url": API_BASE_URL,
+            "message": f"API request timed out after {_TIMEOUT}s",
+            "url": API_URL,
         }
     except Exception as e:
         return {
             "available": False,
             "error": "unknown",
             "message": str(e),
-            "url": API_BASE_URL,
+            "url": API_URL,
         }
 
 # TODO: connect to database (ex: BigQuery MCP)
@@ -194,6 +218,35 @@ MOCK_HOT_COLD_DB: dict[str, list[dict]] = {
     ],
 }
 
+
+def _post(path: str, body: dict) -> dict:
+    """POST helper for MLB API endpoints."""
+    # requests' json= sets Content-Type: application/json (avoids 422 from form-encoded bodies)
+    r = _session.post(
+        f"{API_URL}{path}",
+        json=body,
+        headers=_get_headers(),
+        timeout=_TIMEOUT,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def forecast(season: int, sims: Optional[int] = None) -> dict:
+    """Run a season forecast: simulate the rest of the season and return each
+    team's projected wins and playoff/division/pennant/World Series odds.
+
+    Args:
+        season (int): MLB season year (e.g., 2025).
+        sims (Optional[int]): Monte Carlo simulation count. If omitted, server default is used.
+
+    Returns:
+        dict: season, n_sims, and teams list with projected wins and odds.
+    """
+    payload = {"season": season}
+    if sims is not None:
+        payload["sims"] = sims
+    return _post("/forecast", payload)
 
 def _normalize_year(year: str | int) -> str:
     return str(year)
