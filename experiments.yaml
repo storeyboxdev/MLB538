@@ -1,0 +1,69 @@
+# Model experiment presets — used by `mlbfc compare`.
+#
+# Each preset is a SPARSE OVERRIDE applied on top of config.yaml. Run them with:
+#
+#     mlbfc compare                       # all presets, ranked by walk-forward CV log loss
+#     mlbfc compare --only best_current,logistic_strong_reg
+#     mlbfc compare --seasons 2017-2024
+#
+# This is report-only: nothing is saved. To adopt a winner, copy its settings
+# into config.yaml and run `mlbfc train`.
+#
+# A preset may set:
+#   kinds:    families to evaluate, subset of [logistic, lightgbm]  (default: both)
+#   ml:       overrides for ml.logistic / ml.lightgbm / ml.calibration
+#   features: overrides for features.include / features.recent_form_window
+# (An `elo:` block in a preset is ignored — Elo is held fixed during comparison.
+#  To tune Elo, edit config.yaml and run `fit-elo`.)
+#
+# ── TOP COMBINATIONS SO FAR ──────────────────────────────────────────────────
+# Lower pooled walk-forward CV log loss = better. Paste fresh numbers back here
+# after running `mlbfc compare` so the ranking stays a living record.
+# Measured 2026-06-22 via `mlbfc compare --seasons 2017-2025` (n=15,775):
+#
+#   1. no_recent_form      logistic, all features minus recent_form   log_loss 0.67648
+#   2. best_current        logistic C=1.0, sigmoid, all features      log_loss 0.67653   [LIVE in config.yaml]
+#   3. lightgbm_shallow    shallow, regularized trees                 log_loss 0.68054   (best tree model)
+#
+# Notes: dropping recent_form edges out the live config by 0.00005 — within noise,
+# not yet worth adopting. The logistic C knob (0.3 / 1.0 / 3.0) made no measurable
+# difference: standardized features + ~16k rows make L2 nearly irrelevant here.
+# Both tree variants trail the linear model on this noisy target.
+# ─────────────────────────────────────────────────────────────────────────────
+
+presets:
+  # The current production settings (mirrors config.yaml). Keep this as the
+  # baseline every other variant is measured against.
+  best_current:
+    kinds: [logistic]
+    ml:
+      logistic: {C: 1.0}
+      calibration: sigmoid
+
+  # Tree model at library defaults — useful sanity check vs. the linear model.
+  lightgbm_default:
+    kinds: [lightgbm]
+
+  # More L2 regularization on the logistic model (smaller C = stronger shrinkage).
+  logistic_strong_reg:
+    kinds: [logistic]
+    ml:
+      logistic: {C: 0.3}
+
+  # Less regularization (larger C). Trials whether the linear model is underfitting.
+  logistic_weak_reg:
+    kinds: [logistic]
+    ml:
+      logistic: {C: 3.0}
+
+  # Ablation: drop the recent-form feature group (rebuilds the feature matrix).
+  no_recent_form:
+    kinds: [logistic]
+    features:
+      include: {recent_form: false}
+
+  # Shallower, more-regularized trees to fight overfitting on the tree model.
+  lightgbm_shallow:
+    kinds: [lightgbm]
+    ml:
+      lightgbm: {num_leaves: 15, min_child_samples: 100, learning_rate: 0.02}

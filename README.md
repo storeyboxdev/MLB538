@@ -37,9 +37,67 @@ mlbfc train    --through 2024           # train LR + LightGBM, calibrate, save b
 mlbfc forecast --season 2025 --sims 10000
 mlbfc update   --season 2025            # self-correct: online Elo + periodic retrain
 mlbfc backtest --through 2024           # log-loss / Brier / calibration, model comparison
+mlbfc compare  --seasons 2017-2024      # rank model/feature variants from experiments.yaml
 ```
 
-All tunables live in `config.yaml`.
+All tunables live in `config.yaml`. To trial model/training variants without
+editing it, add named presets to `experiments.yaml` and run `mlbfc compare`.
+
+## Running as a service
+
+The forecaster can run as a long-lived server so agents and other clients can
+call its commands as tools. Both front-ends share one core (`mlb_forecaster/service/`):
+fast operations (model info, presets, forecast) run synchronously, while heavy
+ones (scrape, train, fit-elo, backtest, compare, update) are dispatched to a
+single-worker background job queue that serializes them and streams logs — so two
+heavy jobs never race on the model registry or data files. Submit a job, get an
+id back, then poll for status and result.
+
+Install the optional dependencies (FastAPI, Uvicorn, MCP):
+
+```bash
+pip install -e ".[service]"
+```
+
+### REST API
+
+```bash
+mlbfc serve --port 8000     # interactive docs at http://127.0.0.1:8000/docs
+```
+
+```bash
+curl localhost:8000/model                                   # latest model metadata
+curl localhost:8000/presets                                 # experiment presets
+curl -X POST localhost:8000/forecast -d '{"season":2025,"sims":10000}'
+
+# heavy commands return a job; poll it
+JID=$(curl -sX POST localhost:8000/jobs/train -d '{"through":2024,"fit_elo":true}' | jq -r .id)
+curl localhost:8000/jobs/$JID                               # status, logs, result
+```
+
+Endpoints: `GET /health`, `GET /model`, `GET /presets`, `POST /forecast`, and
+`POST /jobs/{scrape,fit-elo,train,backtest,compare,update}` plus `GET /jobs` and
+`GET /jobs/{id}`.
+
+### MCP server
+
+For AI agents (Claude Code, Claude API agents, …), the same surface is exposed as
+MCP tools over stdio:
+
+```bash
+mlbfc mcp
+```
+
+Tools: `forecast`, `get_model_info`, `list_presets`, `submit_scrape`,
+`submit_fit_elo`, `submit_train`, `submit_backtest`, `submit_compare`,
+`submit_update`, `get_job`, `list_jobs`. Point an MCP client config at the
+`mlbfc mcp` command to register it.
+
+### Keeping it running
+
+Run `mlbfc serve` behind a process manager locally, or containerize and deploy
+to Cloud Run with `min-instances=1` (the project already has GCS wiring) so the
+endpoint stays warm rather than scaling to zero.
 
 ## Results
 

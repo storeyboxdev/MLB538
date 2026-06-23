@@ -113,7 +113,7 @@ def walk_forward_cv(kind: str, config: Config, feats: pd.DataFrame,
 def train_select(config: Config, feats: pd.DataFrame,
                  kinds: tuple[str, ...] = ("logistic", "lightgbm"),
                  log: Callable[[str], None] = print) -> dict[str, Any]:
-    """Run CV for each family, pick the best, refit on all data with calibration.
+    """Run CV for each ml model, pick the best, refit on all data with calibration.
 
     Returns a dict with the selected ``model`` (CalibratedModel), ``cols``, and
     a ``report`` with per-family CV metrics.

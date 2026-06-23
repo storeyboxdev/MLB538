@@ -1,4 +1,4 @@
-"""Command-line interface: scrape | rate | fit-elo | train | forecast | update | backtest."""
+"""Command-line interface: scrape | rate | fit-elo | train | forecast | update | backtest | compare | serve | mcp."""
 
 from __future__ import annotations
 
@@ -117,6 +117,52 @@ def backtest(ctx, seasons, through):
     click.echo("calibration (best model):")
     for row in report["calibration_best"]:
         click.echo(f"  {row['bucket']}: pred={row['pred_mean']:.3f} obs={row['obs_rate']:.3f} (n={row['n']})")
+
+
+@main.command()
+@click.option("--seasons", default=None)
+@click.option("--presets", "presets_path", default="experiments.yaml",
+              help="Path to the experiment presets file")
+@click.option("--only", default=None, help="Comma-separated preset names to run")
+@click.pass_context
+def compare(ctx, seasons, presets_path, only):
+    """Compare model/training variants from experiments.yaml (report only)."""
+    cfg = ctx.obj["config"]
+    names = [n.strip() for n in only.split(",") if n.strip()] if only else None
+    report = pipeline.compare(cfg, _seasons(cfg, seasons), presets_path, names=names)
+    results = report["results"]
+    if not results:
+        click.echo("no variants evaluated")
+        return
+    best_ll = results[0]["log_loss"]
+    click.echo(f"\nvariants ranked by walk-forward CV log loss "
+               f"(seasons {report['seasons'][0]}-{report['seasons'][-1]}):")
+    click.echo(f"  {'name':<20} {'family':<9} {'log_loss':>10} {'brier':>8} "
+               f"{'n':>7} {'vs-best':>9}")
+    for r in results:
+        click.echo(f"  {r['name']:<20} {r['family']:<9} {r['log_loss']:>10.5f} "
+                   f"{r['brier']:>8.4f} {r['n']:>7} {r['log_loss'] - best_ll:>+9.5f}")
+    click.echo(f"\nbest: {report['best']}  "
+               f"(adopt by editing config.yaml, then `mlbfc train`)")
+
+
+@main.command()
+@click.option("--host", default="127.0.0.1", help="Bind address")
+@click.option("--port", type=int, default=8000, help="Port")
+@click.option("--reload", is_flag=True, help="Auto-reload on code changes (dev)")
+def serve(host, port, reload):
+    """Run the REST API (FastAPI) for agents/clients to call tools against."""
+    import uvicorn  # imported lazily so the 'service' extra is optional
+
+    uvicorn.run("mlb_forecaster.service.api:app", host=host, port=port, reload=reload)
+
+
+@main.command()
+def mcp():
+    """Run the MCP server (stdio) exposing the forecaster as agent tools."""
+    from .service.mcp_server import main as run_mcp  # lazy: optional 'service' extra
+
+    run_mcp()
 
 
 if __name__ == "__main__":

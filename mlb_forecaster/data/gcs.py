@@ -81,9 +81,33 @@ def _upload_parquet(df: pd.DataFrame, config: Config, blob_name: str) -> str:
                         "application/octet-stream")
 
 
+# Integer-valued columns that may contain nulls (missing starter lines, scores for
+# unplayed games). Pinned to pandas nullable Int64 so every season's Parquet has an
+# identical INT64 schema — otherwise BigQuery's wildcard load rejects files whose
+# column is INT64 in one season and DOUBLE in another.
+_GAMES_INT_COLS = [
+    "home_score", "away_score", "venue_id",
+    "home_pitcher_id", "away_pitcher_id", "home_starter_id", "away_starter_id",
+    "home_outs", "home_hits", "home_runs", "home_earned_runs",
+    "home_walks", "home_strikeouts", "home_home_runs",
+    "away_outs", "away_hits", "away_runs", "away_earned_runs",
+    "away_walks", "away_strikeouts", "away_home_runs",
+]
+
+
+def _coerce_games_schema(df: pd.DataFrame) -> pd.DataFrame:
+    """Pin integer columns to nullable Int64 so all seasons share one schema."""
+    out = df.copy()
+    for c in _GAMES_INT_COLS:
+        if c in out.columns:
+            out[c] = pd.to_numeric(out[c], errors="coerce").astype("Int64")
+    return out
+
+
 def upload_games(df: pd.DataFrame, config: Config, season: int) -> str:
     """Upload a season's games as Parquet to gs://<bucket>/<prefix>/processed/."""
-    return _upload_parquet(df, config, f"{prefix(config)}/processed/games_{season}.parquet")
+    out = _coerce_games_schema(df)
+    return _upload_parquet(out, config, f"{prefix(config)}/processed/games_{season}.parquet")
 
 
 def upload_ratings(df: pd.DataFrame, config: Config) -> str:
