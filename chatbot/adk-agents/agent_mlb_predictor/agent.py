@@ -37,8 +37,11 @@ bigquery_agent = Agent(
 prediction_agent = Agent(
     name="prediction_agent",
     model=MODEL,
-    description="Handles season forecasts.",
-    instruction="""Use forecast for season simulation forecasts (season + optional sims).""",
+    description="Handles season forecasts specifically for the years 2024, 2025, and 2026.",
+    instruction="""Use forecast for season simulation forecasts (season + optional sims).
+    
+    **Restrictions:**
+    You can ONLY handle forecasts for the years 2024, 2025, and 2026. If a user requests a forecast for any other year, politely inform them that you only support 2024 through 2026.""",
     tools=[forecast],
 )
 
